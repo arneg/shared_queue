@@ -1,12 +1,10 @@
-CFLAGS += -O3 -g -ggdb
+CFLAGS += -O3 -g -ggdb -Isrc/include
 LIBS += -lrt
 
 LIBRARY_FILES=$(wildcard src/include/*)
 
-all: build/fork_test
+all: build/benchmark/fork_bandwidth
 
-build:
-	mkdir -p $@
-
-build/%: src/%.c $(LIBRARY_FILES) Makefile | build
+build/%: src/%.c $(LIBRARY_FILES) Makefile
+	mkdir -p $(dir $@)
 	gcc $(CFLAGS) $< -o $@ $(LIBS)

@@ -1,8 +1,4 @@
-#include "include/circular_area.h"
-#include "include/shared_counter.h"
-#include "include/shared_alloc.h"
-
-#include "include/spsc_queue.h"
+#include <spsc_queue.h>
 
 #include <errno.h>
 #include <stdint.h>
