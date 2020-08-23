@@ -2,6 +2,8 @@
 #include "include/shared_counter.h"
 #include "include/shared_alloc.h"
 
+#include "include/spsc_queue.h"
+
 #include <errno.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -13,28 +15,8 @@ const size_t OPS = 1000000;
 const size_t MSG_SIZE = 10 * 1024;
 const double GB = 1024 * 1024 * 1024;
 
-struct queue
+void parent(struct spsc_queue *q)
 {
-  struct shared_counter write_offset;
-  struct shared_counter read_offset;
-};
-
-struct queue *allocate_queue()
-{
-  return shared_alloc_anonymous(sizeof(struct queue));
-}
-
-void free_queue(struct queue *q)
-{
-  shared_alloc_free(q, sizeof(struct queue)); 
-}
-
-void parent(struct queue *q, struct circular_area *area)
-{
-  uint32_t write_offset = 0;
-  uint32_t size = area->size;
-  size_t stalled = 0;
-
   uint32_t sum = 0;
 
   struct timespec start;
@@ -44,17 +26,7 @@ void parent(struct queue *q, struct circular_area *area)
 
   for (size_t i = 0; i < OPS; i++)
   {
-    uint32_t read_offset = shared_counter_read(&q->read_offset);
-
-    if (size < (write_offset - read_offset) + MSG_SIZE)
-    {
-      stalled ++;
-      i--;
-      shared_counter_wait(&q->read_offset, read_offset);
-      continue;
-    }
-
-    uint8_t *from = circular_area_get_pointer(area, write_offset);
+    uint8_t *from = spsc_queue_write(q, MSG_SIZE);
     uint8_t *to = from + MSG_SIZE;
 
     uint8_t n = 0;
@@ -66,17 +38,7 @@ void parent(struct queue *q, struct circular_area *area)
       n++;
     }
 
-    shared_counter_write(&q->write_offset, write_offset + MSG_SIZE);
-
-    read_offset = shared_counter_read(&q->read_offset);
-
-    if (read_offset == write_offset)
-    {
-      // wake the reader
-      shared_counter_wake(&q->write_offset);
-    }
-
-    write_offset += MSG_SIZE;
+    spsc_queue_write_commit(q, MSG_SIZE);
   }
 
   clock_gettime(CLOCK_MONOTONIC, &finish);
@@ -84,16 +46,12 @@ void parent(struct queue *q, struct circular_area *area)
   double elapsed = finish.tv_sec - start.tv_sec + (finish.tv_nsec - start.tv_nsec) * 1E-9;
   double bytes_per_second = (OPS * MSG_SIZE) / elapsed;
 
-  printf("Writer: stalled %lu, sum %u, took: %lf, %lf GB/s\n", stalled, sum, elapsed, bytes_per_second / GB);
+  printf("Writer: sum %u, took: %lf, %lf GB/s\n", sum, elapsed, bytes_per_second / GB);
 }
 
-void child(struct queue *q, struct circular_area *area)
+void child(struct spsc_queue *q)
 {
-  uint32_t read_offset = 0;
-  uint32_t size = area->size;
-
   uint32_t sum = 0;
-  size_t stalled = 0;
 
   struct timespec start;
   struct timespec finish;
@@ -102,17 +60,7 @@ void child(struct queue *q, struct circular_area *area)
 
   for (size_t i = 0; i < OPS; i++)
   {
-    uint32_t write_offset = shared_counter_read(&q->write_offset);
-
-    if (write_offset == read_offset)
-    {
-      stalled++;
-      i--;
-      shared_counter_wait(&q->write_offset, write_offset);
-      continue;
-    }
-
-    const uint8_t *from = circular_area_get_pointer(area, read_offset);
+    const uint8_t *from = spsc_queue_read(q, MSG_SIZE);
     const uint8_t *to = from + MSG_SIZE;
 
     for (const uint8_t *it = from; it < to; it++)
@@ -120,16 +68,7 @@ void child(struct queue *q, struct circular_area *area)
       sum += *it;
     }
 
-    shared_counter_write(&q->read_offset, read_offset + MSG_SIZE);
-
-    write_offset = shared_counter_read(&q->write_offset);
-
-    if (size < (write_offset - read_offset) + MSG_SIZE)
-    {
-      shared_counter_wake(&q->read_offset);
-    }
-
-    read_offset += MSG_SIZE;
+    spsc_queue_read_commit(q, MSG_SIZE);
   }
 
   clock_gettime(CLOCK_MONOTONIC, &finish);
@@ -137,38 +76,31 @@ void child(struct queue *q, struct circular_area *area)
   double elapsed = finish.tv_sec - start.tv_sec + (finish.tv_nsec - start.tv_nsec) * 1E-9;
   double bytes_per_second = (OPS * MSG_SIZE) / elapsed;
 
-  printf("Reader: stalled %lu, sum %u, took: %lf, %lf GB/s\n", stalled, sum, elapsed, bytes_per_second / GB);
+  printf("Reader: sum %u, took: %lf, %lf GB/s\n", sum, elapsed, bytes_per_second / GB);
 }
 
 int main(int argc, const char **argv)
 {
-  struct circular_area area;
+  struct spsc_queue q;
 
-  if (circular_area_allocate_shared_anonymous(&area, SIZE))
+  spsc_queue_init(&q);
+
+  if (spsc_queue_alloc_anonymous(&q, SIZE))
   {
-    printf("Creating the area failed: %s\n", strerror(errno));
-    return 1;
-  }
-
-  struct queue *q = allocate_queue();
-
-  if (q == MAP_FAILED)
-  {
-    printf("Creating the queue failed: %s\n", strerror(errno));
+    printf("Creating spsc queue failed: %s\n", strerror(errno));
     return 1;
   }
 
   if (fork())
   {
-    child(q, &area);
+    child(&q);
   }
   else
   {
-    parent(q, &area);
+    parent(&q);
   }
 
-  free_queue(q);
-  circular_area_free(&area);
+  spsc_queue_free(&q);
 
   return 0;
 }
