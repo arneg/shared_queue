@@ -31,11 +31,8 @@ void free_queue(struct queue *q)
 
 void parent(struct queue *q, struct circular_area *area)
 {
-  uint8_t *base = (uint8_t*)area->base;
-
   uint32_t write_offset = 0;
   uint32_t size = area->size;
-  uint32_t mask = area->size - 1;
   size_t stalled = 0;
 
   uint32_t sum = 0;
@@ -49,7 +46,7 @@ void parent(struct queue *q, struct circular_area *area)
   {
     uint32_t read_offset = shared_counter_read(&q->read_offset);
 
-    if (size - (write_offset - read_offset) < MSG_SIZE)
+    if (size < (write_offset - read_offset) + MSG_SIZE)
     {
       stalled ++;
       i--;
@@ -57,7 +54,7 @@ void parent(struct queue *q, struct circular_area *area)
       continue;
     }
 
-    uint8_t *from = base + (write_offset & mask);
+    uint8_t *from = circular_area_get_pointer(area, write_offset);
     uint8_t *to = from + MSG_SIZE;
 
     uint8_t n = 0;
@@ -92,11 +89,8 @@ void parent(struct queue *q, struct circular_area *area)
 
 void child(struct queue *q, struct circular_area *area)
 {
-  uint8_t *base = (uint8_t*)area->base;
-
   uint32_t read_offset = 0;
   uint32_t size = area->size;
-  uint32_t mask = area->size - 1;
 
   uint32_t sum = 0;
   size_t stalled = 0;
@@ -118,7 +112,7 @@ void child(struct queue *q, struct circular_area *area)
       continue;
     }
 
-    const uint8_t *from = base + (read_offset & mask);
+    const uint8_t *from = circular_area_get_pointer(area, read_offset);
     const uint8_t *to = from + MSG_SIZE;
 
     for (const uint8_t *it = from; it < to; it++)
@@ -130,7 +124,7 @@ void child(struct queue *q, struct circular_area *area)
 
     write_offset = shared_counter_read(&q->write_offset);
 
-    if (size - (write_offset - read_offset) < MSG_SIZE)
+    if (size < (write_offset - read_offset) + MSG_SIZE)
     {
       shared_counter_wake(&q->read_offset);
     }

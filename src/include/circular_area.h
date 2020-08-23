@@ -37,6 +37,10 @@ static inline int circular_area_allocate_shared(struct circular_area *area, size
 
   do
   {
+    // we require power of two size
+    if (size & (size - 1))
+      break;
+
     fd = mkstemp(template);
 
     if (fd < 0)
@@ -100,4 +104,9 @@ static inline int circular_area_allocate_shared_anonymous(struct circular_area *
   }
 
   return status;
+}
+
+static inline void * circular_area_get_pointer(struct circular_area *area, size_t offset)
+{
+  return (char*)area->base + (offset & (area->size - 1));
 }
