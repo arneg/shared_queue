@@ -1,18 +1,29 @@
 #pragma once
 
+#include <errno.h>
+#include <assert.h>
 #include <stdatomic.h>
 #include <stdint.h>
 
 #include "futex.h"
 
+
 static inline void futex_wait(const uint32_t *ptr, uint32_t val)
 {
-  futex((int*)ptr, FUTEX_WAIT, (int)val, NULL, NULL, 0);
+  int status = futex((int*)ptr, FUTEX_WAIT, (int)val, NULL, NULL, 0);
+
+  (void)status;
+
+  assert(-1 != status || errno == EAGAIN);
 }
 
-static inline void futex_wake(const uint32_t *ptr)
+static inline int futex_wake(const uint32_t *ptr, int waiters)
 {
-  futex((int*)ptr, FUTEX_WAKE, 1, NULL, NULL, 0);
+  int status = futex((int*)ptr, FUTEX_WAKE, waiters, NULL, NULL, 0);
+
+  assert(-1 < status);
+
+  return status;
 }
 
 struct shared_counter
@@ -40,7 +51,7 @@ static inline void shared_counter_wait(const struct shared_counter *counter, uin
   futex_wait(&counter->n, current_value);
 }
 
-static inline void shared_counter_wake(const struct shared_counter *counter)
+static inline int shared_counter_wake(const struct shared_counter *counter)
 {
-  futex_wake(&counter->n);
+  return futex_wake(&counter->n, 1);
 }
