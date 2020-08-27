@@ -73,9 +73,10 @@ static inline const void * spsc_queue_read(struct spsc_queue *q, size_t size)
 static inline void spsc_queue_read_commit(struct spsc_queue *q, size_t size)
 {
   uint32_t read_offset = shared_counter_load(&q->header->read_offset);
-  uint32_t write_offset = shared_counter_read(&q->header->write_offset);
 
   shared_counter_write(&q->header->read_offset, read_offset + size);
+
+  uint32_t write_offset = shared_counter_read(&q->header->write_offset);
 
   // FIXME: this check is only valid if both reader and writer agree on a size here.
   if (q->area.size < (write_offset - read_offset) + size)
@@ -94,7 +95,7 @@ static inline void * spsc_queue_write(struct spsc_queue *q, size_t size)
   {
     uint32_t read_offset = shared_counter_read(&q->header->read_offset);
 
-    if (q->area.size - (write_offset - read_offset) < size)
+    if (q->area.size < (write_offset - read_offset) + size)
     {
       shared_counter_wait(&q->header->read_offset, read_offset);
       continue;
@@ -108,13 +109,14 @@ static inline void spsc_queue_write_commit(struct spsc_queue *q, size_t size)
 {
   assert(size <= q->area.size);
 
-  uint32_t read_offset = shared_counter_read(&q->header->read_offset);
   uint32_t write_offset = shared_counter_load(&q->header->write_offset);
 
   shared_counter_write(&q->header->write_offset, write_offset + size);
 
+  uint32_t read_offset = shared_counter_read(&q->header->read_offset);
+
   // FIXME: this check is only valid if both reader and writer agree on a size here.
-  if (read_offset == write_offset)
+  if (write_offset - read_offset < size)
   {
     // wake the reader
     shared_counter_wake(&q->header->write_offset);
