@@ -5,6 +5,7 @@
 #include "shared_counter.h"
 
 #include <assert.h>
+#include <string.h>
 
 struct spsc_header
 {
@@ -85,6 +86,15 @@ static inline void spsc_queue_read_commit(struct spsc_queue *q, size_t size)
   }
 }
 
+static inline void spsc_queue_read_to(struct spsc_queue *q, void *dst, size_t size)
+{
+  const void *src = spsc_queue_read(q, size);
+
+  memcpy(dst, src, size);
+
+  spsc_queue_read_commit(q, size);
+}
+
 static inline void * spsc_queue_write(struct spsc_queue *q, size_t size)
 {
   uint32_t write_offset = shared_counter_load(&q->header->write_offset);
@@ -121,4 +131,13 @@ static inline void spsc_queue_write_commit(struct spsc_queue *q, size_t size)
     // wake the reader
     shared_counter_wake(&q->header->write_offset);
   }
+}
+
+static inline void spsc_queue_write_from(struct spsc_queue *q, const void *src, size_t size)
+{
+  void *dst = spsc_queue_write(q, size);
+
+  memcpy(dst, src, size);
+
+  spsc_queue_write_commit(q, size);
 }
