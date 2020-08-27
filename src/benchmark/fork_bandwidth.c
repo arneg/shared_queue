@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <time.h>
+#include <unistd.h>
 
 const size_t SIZE = 4 * 1024 * 1024;
 const size_t OPS = 1000000;
@@ -17,6 +18,9 @@ void parent(struct spsc_queue *q)
 
   struct timespec start;
   struct timespec finish;
+
+  // sleep for 100ms
+  usleep(1000 * 100);
 
   clock_gettime(CLOCK_MONOTONIC, &start);
 
@@ -52,12 +56,13 @@ void child(struct spsc_queue *q)
   struct timespec start;
   struct timespec finish;
 
-  clock_gettime(CLOCK_MONOTONIC, &start);
-
   for (size_t i = 0; i < OPS; i++)
   {
     const uint8_t *from = spsc_queue_read(q, MSG_SIZE);
     const uint8_t *to = from + MSG_SIZE;
+
+    if (!i)
+      clock_gettime(CLOCK_MONOTONIC, &start);
 
     for (const uint8_t *it = from; it < to; it++)
     {
