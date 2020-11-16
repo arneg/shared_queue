@@ -8,7 +8,7 @@
 #include "futex.h"
 
 
-static inline void futex_wait(const uint32_t *ptr, uint32_t val)
+static inline void futex_wait(const atomic_uint *ptr, uint32_t val)
 {
   int status = futex((int*)ptr, FUTEX_WAIT, (int)val, NULL, NULL, 0);
 
@@ -17,7 +17,7 @@ static inline void futex_wait(const uint32_t *ptr, uint32_t val)
   assert(-1 != status || errno == EAGAIN);
 }
 
-static inline int futex_wake(const uint32_t *ptr, int waiters)
+static inline int futex_wake(const atomic_uint *ptr, int waiters)
 {
   int status = futex((int*)ptr, FUTEX_WAKE, waiters, NULL, NULL, 0);
 
@@ -28,7 +28,7 @@ static inline int futex_wake(const uint32_t *ptr, int waiters)
 
 struct shared_counter
 {
-  uint32_t n __attribute__((aligned (64)));
+  atomic_uint n __attribute__((aligned (64)));
 };
 
 static inline uint32_t shared_counter_load(const struct shared_counter *counter)
@@ -41,9 +41,9 @@ static inline uint32_t shared_counter_read(const struct shared_counter *counter)
   return atomic_load_explicit(&counter->n, memory_order_acquire);
 }
 
-static inline void shared_counter_write(struct shared_counter *counter, uint32_t value)
+static inline uint32_t shared_counter_inc(struct shared_counter *counter, uint32_t value)
 {
-  atomic_store_explicit(&counter->n, value, memory_order_release);
+  return atomic_fetch_add_explicit(&counter->n, value, memory_order_acq_rel);
 }
 
 static inline void shared_counter_wait(const struct shared_counter *counter, uint32_t current_value)
