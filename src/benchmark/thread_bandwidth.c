@@ -1,5 +1,7 @@
 #include "bandwidth.h"
 
+#include <pthread.h>
+
 int main(int argc, const char **argv)
 {
   struct spsc_queue q;
@@ -12,14 +14,14 @@ int main(int argc, const char **argv)
     return 1;
   }
 
-  if (fork())
-  {
-    receiver(&q);
-  }
-  else
-  {
-    writer(&q);
-  }
+  pthread_t t1;
+  pthread_t t2;
+
+  pthread_create(&t1, NULL, (void*)receiver, &q);
+  pthread_create(&t2, NULL, (void*)writer, &q);
+
+  pthread_join(t1, NULL);
+  pthread_join(t2, NULL);
 
   spsc_queue_free(&q);
 
