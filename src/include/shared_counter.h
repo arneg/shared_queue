@@ -31,19 +31,14 @@ struct shared_counter
   atomic_uint n __attribute__((aligned (64)));
 };
 
-static inline uint32_t shared_counter_load(const struct shared_counter *counter)
-{
-  return counter->n;
-}
-
 static inline uint32_t shared_counter_read(const struct shared_counter *counter)
 {
-  return atomic_load_explicit(&counter->n, memory_order_acquire);
+  return atomic_load_explicit(&counter->n, memory_order_relaxed);
 }
 
 static inline uint32_t shared_counter_inc(struct shared_counter *counter, uint32_t value)
 {
-  return atomic_fetch_add_explicit(&counter->n, value, memory_order_acq_rel);
+  return atomic_fetch_add_explicit(&counter->n, value, memory_order_relaxed);
 }
 
 static inline void shared_counter_wait(const struct shared_counter *counter, uint32_t current_value)

@@ -53,7 +53,7 @@ static inline int spsc_queue_alloc_anonymous(struct spsc_queue *q, size_t size)
 
 static inline const void * spsc_queue_read(struct spsc_queue *q, size_t size)
 {
-  uint32_t read_offset = shared_counter_load(&q->header->read_offset);
+  uint32_t read_offset = shared_counter_read(&q->header->read_offset);
 
   assert(size <= q->area.size);
 
@@ -73,7 +73,9 @@ static inline const void * spsc_queue_read(struct spsc_queue *q, size_t size)
 
 static inline void spsc_queue_read_commit(struct spsc_queue *q, size_t size)
 {
+  atomic_thread_fence(memory_order_release);
   uint32_t read_offset = shared_counter_inc(&q->header->read_offset, size);
+  atomic_thread_fence(memory_order_acquire);
   uint32_t write_offset = shared_counter_read(&q->header->write_offset);
 
   // FIXME: this check is only valid if both reader and writer agree on a size here.
@@ -94,7 +96,7 @@ static inline void spsc_queue_read_to(struct spsc_queue *q, void *dst, size_t si
 
 static inline void * spsc_queue_write(struct spsc_queue *q, size_t size)
 {
-  uint32_t write_offset = shared_counter_load(&q->header->write_offset);
+  uint32_t write_offset = shared_counter_read(&q->header->write_offset);
 
   assert(size <= q->area.size);
 
@@ -116,7 +118,9 @@ static inline void spsc_queue_write_commit(struct spsc_queue *q, size_t size)
 {
   assert(size <= q->area.size);
 
+  atomic_thread_fence(memory_order_release);
   uint32_t write_offset = shared_counter_inc(&q->header->write_offset, size);
+  atomic_thread_fence(memory_order_acquire);
   uint32_t read_offset = shared_counter_read(&q->header->read_offset);
 
   // FIXME: this check is only valid if both reader and writer agree on a size here.
