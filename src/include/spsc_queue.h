@@ -3,6 +3,7 @@
 #include "circular_area.h"
 #include "shared_alloc.h"
 #include "shared_counter.h"
+#include "port.h"
 
 #include <assert.h>
 #include <string.h>
@@ -34,12 +35,12 @@ static inline int spsc_queue_alloc_anonymous(struct spsc_queue *q, size_t size)
 {
   struct spsc_header *header = shared_alloc_anonymous(sizeof(struct spsc_header));
 
-  if (header == MAP_FAILED)
+  if (unlikely(header == MAP_FAILED))
     return -1;
 
   int status = circular_area_allocate_shared_anonymous(&q->area, size);
 
-  if (status)
+  if (unlikely(status))
   {
     shared_alloc_free(header, sizeof(*header));
   }
@@ -61,7 +62,7 @@ static inline const void * spsc_queue_read(struct spsc_queue *q, size_t size)
   {
     uint32_t write_offset = shared_counter_read(&q->header->write_offset);
 
-    if (write_offset - read_offset < size)
+    if (unlikely(write_offset - read_offset < size))
     {
       shared_counter_wait(&q->header->write_offset, write_offset);
       continue;
@@ -79,7 +80,7 @@ static inline void spsc_queue_read_commit(struct spsc_queue *q, size_t size)
   uint32_t write_offset = shared_counter_read(&q->header->write_offset);
 
   // FIXME: this check is only valid if both reader and writer agree on a size here.
-  if (q->area.size < (write_offset - read_offset) + size)
+  if (unlikely(q->area.size < (write_offset - read_offset) + size))
   {
     shared_counter_wake(&q->header->read_offset);
   }
@@ -104,7 +105,7 @@ static inline void * spsc_queue_write(struct spsc_queue *q, size_t size)
   {
     uint32_t read_offset = shared_counter_read(&q->header->read_offset);
 
-    if (q->area.size < (write_offset - read_offset) + size)
+    if (unlikely(q->area.size < (write_offset - read_offset) + size))
     {
       shared_counter_wait(&q->header->read_offset, read_offset);
       continue;
@@ -124,7 +125,7 @@ static inline void spsc_queue_write_commit(struct spsc_queue *q, size_t size)
   uint32_t read_offset = shared_counter_read(&q->header->read_offset);
 
   // FIXME: this check is only valid if both reader and writer agree on a size here.
-  if (write_offset - read_offset < size)
+  if (unlikely(write_offset - read_offset < size))
   {
     // wake the reader
     shared_counter_wake(&q->header->write_offset);

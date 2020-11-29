@@ -1,5 +1,7 @@
 #pragma once
 
+#include "port.h"
+
 #include <sys/mman.h>
 
 static inline size_t shared_alloc_round_up(size_t bytes)
@@ -15,7 +17,7 @@ static inline void *shared_alloc_anonymous(size_t size)
 
 static inline void *shared_alloc_free(void *ptr, size_t size)
 {
-  if (ptr == MAP_FAILED)
+  if (unlikely(ptr == MAP_FAILED))
     return ptr;
 
   size = shared_alloc_round_up(size);

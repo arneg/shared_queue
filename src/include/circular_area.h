@@ -2,6 +2,8 @@
 
 #define _GNU_SOURCE
 
+#include "port.h"
+
 #include <stdlib.h>
 #include <sys/mman.h>
 #include <sys/types.h>
@@ -20,10 +22,10 @@ static inline void circular_area_init(struct circular_area *area)
 
 static inline int circular_area_free(struct circular_area *area)
 {
-  if (area->base == MAP_FAILED)
+  if (unlikely(area->base == MAP_FAILED))
     return 0;
   int status = munmap(area->base, area->size * 2);
-  if (!status)
+  if (unlikely(!status))
     area->base = MAP_FAILED;
   return status;
 }
@@ -38,26 +40,26 @@ static inline int circular_area_allocate_shared(struct circular_area *area, size
   do
   {
     // we require power of two size
-    if (size & (size - 1))
+    if (unlikely(size & (size - 1)))
       break;
 
     fd = mkstemp(template);
 
-    if (fd < 0)
+    if (unlikely(fd < 0))
       break;
 
-    if (ftruncate(fd, size))
+    if (unlikely(ftruncate(fd, size)))
       break;
 
     a = mmap(NULL, 2 * size, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
 
-    if (a == MAP_FAILED)
+    if (unlikely(a == MAP_FAILED))
       break;
 
     {
       void *tmp = mremap(a, 2 * size, size, 0);
 
-      if (tmp == MAP_FAILED)
+      if (unlikely(tmp == MAP_FAILED))
         break;
 
       a = tmp;
@@ -65,7 +67,7 @@ static inline int circular_area_allocate_shared(struct circular_area *area, size
 
     b = mmap((char *)a + size, size, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
 
-    if (b != a + size)
+    if (unlikely(b != a + size))
       break;
 
     close(fd);
@@ -95,7 +97,7 @@ static inline int circular_area_allocate_shared_anonymous(struct circular_area *
 
   int status = circular_area_allocate_shared(area, size, template);
 
-  if (!status)
+  if (unlikely(!status))
   {
     if (unlink(template))
     {
