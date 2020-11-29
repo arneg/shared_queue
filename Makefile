@@ -1,4 +1,4 @@
-CFLAGS += -O3 -g -ggdb -Isrc/include
+CFLAGS += -O3 -g -ggdb -Isrc/include -DNDEBUG
 LIBS += -lrt -lpthread
 
 LIBRARY_FILES=$(wildcard src/include/*)
