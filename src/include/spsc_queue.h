@@ -10,8 +10,18 @@
 
 struct spsc_header
 {
+  // Offset at which the next write will start.
   struct shared_counter write_offset;
+  // When the writer is waiting for space to become available, this
+  // variable will contain the number of bytes that the writer would
+  // like to write.
+  size_t write_size;
+  // Offset at which the next read will start.
   struct shared_counter read_offset;
+  // When the reader is waiting for space to become available, this
+  // variable will contain the number of bytes that the reader would
+  // like to read.
+  size_t read_size;
 };
 
 struct spsc_queue
@@ -64,6 +74,7 @@ static inline const void * spsc_queue_read(struct spsc_queue *q, size_t size)
 
     if (unlikely(write_offset - read_offset < size))
     {
+      atomic_store_explicit(&q->header->read_size, size, memory_order_relaxed);
       shared_counter_wait(&q->header->write_offset, write_offset);
       continue;
     }
@@ -78,9 +89,9 @@ static inline void spsc_queue_read_commit(struct spsc_queue *q, size_t size)
   uint32_t read_offset = shared_counter_inc(&q->header->read_offset, size);
   atomic_thread_fence(memory_order_acquire);
   uint32_t write_offset = shared_counter_read(&q->header->write_offset);
+  size_t write_size = atomic_load_explicit(&q->header->write_size, memory_order_relaxed);
 
-  // FIXME: this check is only valid if both reader and writer agree on a size here.
-  if (unlikely(q->area.size < (write_offset - read_offset) + size))
+  if (unlikely(q->area.size < (write_offset - read_offset) + write_size))
   {
     shared_counter_wake(&q->header->read_offset);
   }
@@ -107,6 +118,7 @@ static inline void * spsc_queue_write(struct spsc_queue *q, size_t size)
 
     if (unlikely(q->area.size < (write_offset - read_offset) + size))
     {
+      atomic_store_explicit(&q->header->write_size, size, memory_order_relaxed);
       shared_counter_wait(&q->header->read_offset, read_offset);
       continue;
     }
@@ -123,9 +135,9 @@ static inline void spsc_queue_write_commit(struct spsc_queue *q, size_t size)
   uint32_t write_offset = shared_counter_inc(&q->header->write_offset, size);
   atomic_thread_fence(memory_order_acquire);
   uint32_t read_offset = shared_counter_read(&q->header->read_offset);
+  size_t read_size = atomic_load_explicit(&q->header->read_size, memory_order_relaxed);
 
-  // FIXME: this check is only valid if both reader and writer agree on a size here.
-  if (unlikely(write_offset - read_offset < size))
+  if (unlikely(write_offset - read_offset < read_size))
   {
     // wake the reader
     shared_counter_wake(&q->header->write_offset);

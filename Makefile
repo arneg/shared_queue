@@ -9,4 +9,6 @@ build/%: src/%.c $(LIBRARY_FILES) Makefile
 	mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) $< -o $@ $(LIBS)
 
-build/benchmark/%: $(wildcard src/benchmark/*.h)
+build/benchmark/%: src/benchmark/%.c $(LIBRARY_FILES) Makefile $(wildcard src/benchmark/*.h)
+	mkdir -p $(dir $@)
+	$(CC) $(CFLAGS) $< -o $@ $(LIBS)
