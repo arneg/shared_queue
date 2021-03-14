@@ -1,6 +1,8 @@
 #pragma once
 
-#define _GNU_SOURCE
+#ifndef _GNU_SOURCE
+# define _GNU_SOURCE
+#endif
 
 #include "port.h"
 
@@ -30,7 +32,7 @@ static inline int circular_area_free(struct circular_area *area)
   return status;
 }
 
-static inline int circular_area_allocate_shared(struct circular_area *area, size_t size, char *template)
+static inline int circular_area_allocate_shared(struct circular_area *area, size_t size, char *filename_template)
 {
   void *a = MAP_FAILED;
   void *b = MAP_FAILED;
@@ -43,7 +45,7 @@ static inline int circular_area_allocate_shared(struct circular_area *area, size
     if (unlikely(size & (size - 1)))
       break;
 
-    fd = mkstemp(template);
+    fd = mkstemp(filename_template);
 
     if (unlikely(fd < 0))
       break;
@@ -67,7 +69,7 @@ static inline int circular_area_allocate_shared(struct circular_area *area, size
 
     b = mmap((char *)a + size, size, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
 
-    if (unlikely(b != a + size))
+    if (unlikely((char*)b != (char*)a + size))
       break;
 
     close(fd);
@@ -86,20 +88,20 @@ static inline int circular_area_allocate_shared(struct circular_area *area, size
   if (fd >= 0)
   {
     close(fd);
-    unlink(template);
+    unlink(filename_template);
   }
   return status;
 }
 
 static inline int circular_area_allocate_shared_anonymous(struct circular_area *area, size_t size)
 {
-  char template[] = "/dev/shm/ring-buffer-XXXXXX";
+  char filename_template[] = "/dev/shm/ring-buffer-XXXXXX";
 
-  int status = circular_area_allocate_shared(area, size, template);
+  int status = circular_area_allocate_shared(area, size, filename_template);
 
   if (unlikely(!status))
   {
-    if (unlink(template))
+    if (unlink(filename_template))
     {
       // what do we do with this failure?
     }
