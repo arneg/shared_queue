@@ -18,41 +18,43 @@ namespace spsc
       }
     }
 
-    size_t write_size() const
+    size_t write_size() const noexcept
     {
       return spsc_queue_write_size(&q);
     }
 
-    size_t read_size() const
+    size_t read_size() const noexcept
     {
       return spsc_queue_read_size(&q);
     }
 
-    size_t size() const
+    size_t size() const noexcept
     {
       return read_size();
     }
 
-    size_t capacity() const
+    size_t capacity() const noexcept
     {
       return spsc_queue_capacity(&q);
     }
 
-    bool empty() const
+    bool empty() const noexcept
     {
       return size() == 0;
     }
 
-    void write(const void *src, size_t bytes) {
+    void write(const void *src, size_t bytes) noexcept
+    {
       spsc_queue_write_from(&q, src, bytes);
     }
 
-    bool try_write(const void *src, size_t bytes) {
+    bool try_write(const void *src, size_t bytes) noexcept
+    {
       return spsc_queue_try_write_from(&q, src, bytes);
     }
 
     template <typename Func>
-    void write_with(size_t bytes, Func &&f)
+    void write_with(size_t bytes, Func &&f) noexcept( noexcept(f(std::declval<void*>())) )
     {
       void *dst = spsc_queue_write(&q, bytes);
 
@@ -62,7 +64,7 @@ namespace spsc
     }
 
     template <typename Func>
-    bool try_write_with(size_t bytes, Func &&f)
+    bool try_write_with(size_t bytes, Func &&f) noexcept( noexcept(f(std::declval<void*>())) )
     {
       void *dst = spsc_queue_try_write(&q, bytes);
 
@@ -78,27 +80,32 @@ namespace spsc
 
     template <typename T>
     typename std::enable_if<std::is_trivially_copyable<T>::value, void>::type
-    write(const T &value) {
+    write(const T &value) noexcept
+    {
       write(reinterpret_cast<const void*>(&value), sizeof(T));
     }
 
     template <typename T>
     typename std::enable_if<std::is_trivially_copyable<T>::value, bool>::type
-    try_write(const T &value) {
+    try_write(const T &value) noexcept
+    {
       return try_write(reinterpret_cast<const void*>(&value), sizeof(T));
     }
 
-    void read(void *dst, size_t bytes) {
+    void read(void *dst, size_t bytes) noexcept
+    {
       spsc_queue_read_to(&q, dst, bytes);
     }
 
-    bool try_read(void *dst, size_t bytes) {
+    bool try_read(void *dst, size_t bytes) noexcept
+    {
       return spsc_queue_try_read_to(&q, dst, bytes);
     }
 
     template <typename T>
     typename std::enable_if<std::is_trivially_copyable<T>::value, T>::type
-    read() {
+    read() noexcept
+    {
       T tmp;
       read(reinterpret_cast<void*>(&tmp), sizeof(T));
       return std::move(tmp);
@@ -106,13 +113,13 @@ namespace spsc
 
     template <typename T>
     typename std::enable_if<std::is_trivially_copyable<T>::value, bool>::type
-    try_read(T &dst)
+    try_read(T &dst) noexcept
     {
       return try_read(&dst, sizeof(T));
     }
 
     template <typename Func>
-    void read_with(size_t bytes, Func &&f)
+    void read_with(size_t bytes, Func &&f) noexcept(noexcept(f(std::declval<const void*>())))
     {
       const void *dst = spsc_queue_read(&q, bytes);
 
@@ -122,9 +129,9 @@ namespace spsc
     }
 
     template <typename Func>
-    bool try_read_with(size_t bytes, Func &&f)
+    bool try_read_with(size_t bytes, Func &&f) noexcept(noexcept(f(std::declval<const void*>())))
     {
-      void *dst = spsc_queue_try_read(&q, bytes);
+      const void *dst = spsc_queue_try_read(&q, bytes);
 
       if (dst == nullptr)
         return false;
