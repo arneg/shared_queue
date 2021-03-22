@@ -9,6 +9,9 @@
 #include <assert.h>
 #include <string.h>
 #include <stdint.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 struct spsc_header
 {
@@ -69,11 +72,60 @@ static inline int spsc_queue_alloc_anonymous(struct spsc_queue *q, size_t size)
   return status;
 }
 
+static inline int spsc_queue_fdopen(struct spsc_queue *q, int fd)
+{
+  struct stat statbuf;
+  int status = -1;
+  off_t fsize;
+  size_t size;
+  size_t page_size = (size_t)getpagesize();
+  struct spsc_header *header = (struct spsc_header*)MAP_FAILED;
+
+  do
+  {
+    status = fstat(fd, &statbuf);
+
+    if (status)
+      break;
+
+    fsize = statbuf.st_size;
+
+    if (fsize < page_size)
+      return -1;
+
+    size = fsize - page_size;
+
+    header = (struct spsc_header*)shared_alloc_mmap(sizeof(struct spsc_header), fd, 0);
+
+    if (unlikely(header == MAP_FAILED))
+      break;
+
+    status = circular_area_mmap(&q->area, size, fd, page_size);
+
+    if (status)
+      break;
+
+    q->header = header;
+    return 0;
+  }
+  while (0);
+
+  shared_alloc_free(header, sizeof(struct spsc_header));
+
+  return status;
+}
+
+static inline off_t spsc_queue_shm_size(size_t size) {
+  size_t page_size = (size_t)getpagesize();
+
+  return (off_t)(page_size + shared_alloc_round_up(size));
+}
+
 static inline size_t spsc_queue_read_size(const struct spsc_queue *q)
 {
   uint32_t write_offset = sq_read_once(q->header->write_offset);
   uint32_t read_offset = sq_read_once(q->header->read_offset);
-  
+
   return write_offset - read_offset;
 }
 
@@ -159,7 +211,7 @@ static inline size_t spsc_queue_write_size(const struct spsc_queue *q)
 {
   uint32_t write_offset = sq_read_once(q->header->write_offset);
   uint32_t read_offset = sq_read_once(q->header->read_offset);
-  
+
   return q->area.size - (write_offset - read_offset);
 }
 

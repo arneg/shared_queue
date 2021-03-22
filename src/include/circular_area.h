@@ -32,12 +32,13 @@ static inline int circular_area_free(struct circular_area *area)
   return status;
 }
 
-static inline int circular_area_allocate_shared(struct circular_area *area, size_t size, char *filename_template)
+static inline int circular_area_mmap(struct circular_area *area, size_t size, int fd, size_t offset)
 {
   void *a = MAP_FAILED;
   void *b = MAP_FAILED;
   int status = -1;
-  int fd = -1;
+
+  int flags = fd == -1 ? MAP_SHARED|MAP_ANONYMOUS : MAP_SHARED;
 
   do
   {
@@ -45,15 +46,7 @@ static inline int circular_area_allocate_shared(struct circular_area *area, size
     if (unlikely(size & (size - 1)))
       break;
 
-    fd = mkstemp(filename_template);
-
-    if (unlikely(fd < 0))
-      break;
-
-    if (unlikely(ftruncate(fd, size)))
-      break;
-
-    a = mmap(NULL, 2 * size, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
+    a = mmap(NULL, 2 * size, PROT_READ|PROT_WRITE, flags, fd, offset);
 
     if (unlikely(a == MAP_FAILED))
       break;
@@ -67,12 +60,10 @@ static inline int circular_area_allocate_shared(struct circular_area *area, size
       a = tmp;
     }
 
-    b = mmap((char *)a + size, size, PROT_READ|PROT_WRITE, MAP_SHARED, fd, 0);
+    b = mmap((char *)a + size, size, PROT_READ|PROT_WRITE, flags, fd, offset);
 
     if (unlikely((char*)b != (char*)a + size))
       break;
-
-    close(fd);
 
     area->base = a;
     area->size = size;
@@ -85,6 +76,32 @@ static inline int circular_area_allocate_shared(struct circular_area *area, size
     munmap(a, size);
   if (b != MAP_FAILED)
     munmap(b, size);
+  return status;
+}
+
+static inline int circular_area_allocate_shared(struct circular_area *area, size_t size, char *filename_template)
+{
+  int status = -1;
+  int fd = -1;
+
+  do
+  {
+    fd = mkstemp(filename_template);
+
+    if (unlikely(fd < 0))
+      break;
+
+    if (unlikely(ftruncate(fd, size)))
+      break;
+
+    status = circular_area_mmap(area, size, fd, 0);
+
+    close(fd);
+
+    return 0;
+  }
+  while (0);
+
   if (fd >= 0)
   {
     close(fd);
@@ -95,19 +112,7 @@ static inline int circular_area_allocate_shared(struct circular_area *area, size
 
 static inline int circular_area_allocate_shared_anonymous(struct circular_area *area, size_t size)
 {
-  char filename_template[] = "/dev/shm/ring-buffer-XXXXXX";
-
-  int status = circular_area_allocate_shared(area, size, filename_template);
-
-  if (unlikely(!status))
-  {
-    if (unlink(filename_template))
-    {
-      // what do we do with this failure?
-    }
-  }
-
-  return status;
+  return circular_area_mmap(area, size, -1, 0);
 }
 
 static inline void * circular_area_get_pointer(struct circular_area *area, size_t offset)

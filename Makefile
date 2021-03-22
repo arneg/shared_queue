@@ -4,7 +4,12 @@ LIBS += -lrt -lpthread
 
 LIBRARY_FILES=$(wildcard src/include/*)
 
-all: build/benchmark/fork_bandwidth build/benchmark/fork_latency build/benchmark/thread_bandwidth build/benchmark/thread_bandwidth_cpp
+all: \
+  build/benchmark/fork_bandwidth\
+  build/benchmark/fork_latency\
+  build/benchmark/thread_bandwidth\
+  build/benchmark/thread_bandwidth_cpp\
+  build/benchmark/fork_named_bandwidth
 
 build/%: src/%.c $(LIBRARY_FILES) Makefile
 	mkdir -p $(dir $@)
