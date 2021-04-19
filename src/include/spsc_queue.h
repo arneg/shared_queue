@@ -121,6 +121,16 @@ static inline off_t spsc_queue_shm_size(size_t size) {
   return (off_t)(page_size + shared_alloc_round_up(size));
 }
 
+static inline void spsc_queue_wake_reader(struct spsc_queue *q)
+{
+  futex_wake(&q->header->write_offset, 1);
+}
+
+static inline void spsc_queue_wake_writer(struct spsc_queue *q)
+{
+  futex_wake(&q->header->read_offset, 1);
+}
+
 static inline size_t spsc_queue_read_size(const struct spsc_queue *q)
 {
   uint32_t write_offset = sq_read_once(q->header->write_offset);
@@ -180,7 +190,7 @@ static inline void spsc_queue_read_commit(struct spsc_queue *q, size_t size)
 
   if (unlikely(q->area.size < (write_offset - read_offset) + write_size))
   {
-    futex_wake(&q->header->read_offset, 1);
+    spsc_queue_wake_writer(q);
   }
 }
 
@@ -270,7 +280,7 @@ static inline void spsc_queue_write_commit(struct spsc_queue *q, size_t size)
   if (unlikely(write_offset - read_offset < read_size))
   {
     // wake the reader
-    futex_wake(&q->header->write_offset, 1);
+    spsc_queue_wake_reader(q);
   }
 }
 
