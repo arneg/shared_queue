@@ -90,7 +90,7 @@ static inline int spsc_queue_fdopen(struct spsc_queue *q, int fd)
 
     fsize = statbuf.st_size;
 
-    if (fsize < page_size)
+    if ((size_t)fsize < page_size)
       return -1;
 
     size = fsize - page_size;
