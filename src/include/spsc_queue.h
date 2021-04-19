@@ -154,7 +154,10 @@ static inline const void * spsc_queue_try_read(struct spsc_queue *q, size_t size
   return circular_area_get_pointer(&q->area, read_offset);
 }
 
-static inline const void * spsc_queue_read(struct spsc_queue *q, size_t size)
+typedef int (*spsc_queue_check_callback)(void *);
+
+static inline const void * spsc_queue_read_check(struct spsc_queue *q, size_t size,
+                                                 spsc_queue_check_callback check, void *ctx)
 {
   uint32_t read_offset = sq_read_once(q->header->read_offset);
 
@@ -167,12 +170,18 @@ static inline const void * spsc_queue_read(struct spsc_queue *q, size_t size)
     if (unlikely(write_offset - read_offset < size))
     {
       sq_store_once(q->header->read_size, size);
+      if (check && check(ctx)) return NULL;
       futex_wait(&q->header->write_offset, write_offset);
       continue;
     }
 
     return circular_area_get_pointer(&q->area, read_offset);
   }
+}
+
+static inline const void * spsc_queue_read(struct spsc_queue *q, size_t size)
+{
+  return spsc_queue_read_check(q, size, NULL, NULL);
 }
 
 static inline void spsc_queue_wait_read(struct spsc_queue *q, size_t size)
